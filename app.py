@@ -1,10 +1,10 @@
-# app_full.py
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, Field
-from typing import Optional, List
+# app.py
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 from MongoDB.mongo import MongoDB
-import logging
 from datetime import datetime
+import logging
 
 logger = logging.getLogger("kart_api")
 logger.setLevel(logging.INFO)
@@ -12,120 +12,100 @@ ch = logging.StreamHandler()
 ch.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] %(name)s - %(message)s'))
 logger.addHandler(ch)
 
-app = FastAPI(title="Kart & QR Bakiye API", version="1.1.0")
+app = FastAPI(title="Kart & QR Bakiye API", version="1.2.0")
 
-class CardRequest(BaseModel):
-    kart_id: int = Field(..., example=1135)
-
-class BalanceResponse(BaseModel):
+# ---------------- Models ----------------
+class KartRequest(BaseModel):
     kart_id: int
-    bakiye: float
-    bulundu: bool
+    program: Optional[str] = None
+
+class KartResponse(BaseModel):
+    status: bool
+    bakiye: Optional[float] = None
+    time: Optional[int] = None
+    message: Optional[str] = None
 
 class QRRequest(BaseModel):
     qr_id: str
 
 class QRResponse(BaseModel):
-    qr_id: str
-    hizmet_tipi: Optional[str] = None
-    kullanildi: Optional[bool] = None
+    status: bool
+    program: Optional[str] = None
+    time: Optional[int] = None
+    message: Optional[str] = None
 
-class ChargeRequest(BaseModel):
-    kart_id: int
-    miktar: float
-    buton: int
+# ---------------- Database ----------------
+db = {
+    "cards": MongoDB("OtomatMap", "customers"),
+    "qr": MongoDB("OtomatMap", "qrcode"),
+    "pricing": MongoDB("OtomatMap", "pricing"),
+    "times": MongoDB("OtomatMap", "times")
+}
 
-class ChargeResponse(BaseModel):
-    ok: bool
-    bakiye: float
+# ---------------- Helper ----------------
+def get_card(kart_id: int):
+    return db["cards"].find_document({"kart_id": kart_id})
 
-class PriceItem(BaseModel):
-    buton: int
-    fiyat: float
+def get_program_price(program_name: str):
+    return db["pricing"].find_document({"program": program_name})
 
-# Database containers
-class Database:
-    def __init__(self):
-        self.cards = MongoDB('OtomatMap', 'customers')
-        self.qr_codes = MongoDB('OtomatMap', 'qrcode')
-        self.config = MongoDB('OtomatMap', 'config')
-        self.transactions = MongoDB('OtomatMap', 'transactions')
+def get_program_time(program_name: str):
+    doc = db["times"].find_document({"program": program_name})
+    return doc.get("time") if doc else None
 
-db = Database()
+def get_qr_data(qr_id: str):
+    return db["qr"].find_document({"veri": qr_id})
 
-# --- helper functions
-def get_card_by_id(kart_id: int):
-    try:
-        return db.cards.find_document({'kart_id': kart_id})
-    except Exception as e:
-        logger.error(e)
-        raise HTTPException(status_code=500, detail="DB error")
-
-def get_qr_by_id(qr_id: str):
-    try:
-        return db.qr_codes.find_document({'qr_id': qr_id})
-    except Exception as e:
-        logger.error(e)
-        raise HTTPException(status_code=500, detail="DB error")
-
-# --- endpoints
-@app.post("/bakiye", response_model=BalanceResponse)
-def bakiye(req: CardRequest):
-    user = get_card_by_id(req.kart_id)
-    bakiye = float(user.get('bakiye', 0.0)) if user else 0.0
-    found = bool(user)
-    logger.info(f"Bakiye sorgu kart:{req.kart_id} bakiye:{bakiye} bulundu:{found}")
-    return BalanceResponse(kart_id=req.kart_id, bakiye=bakiye, bulundu=found)
-
-@app.get("/prices", response_model=List[PriceItem])
-def prices():
-    # config collection'da fiyatları saklıyoruz: tek bir doc: { _id: "prices", items: [{buton:1,fiyat:2.5}, ...] }
-    doc = db.config.find_document({'_id': 'prices'})
-    if not doc:
-        # default örnek
-        defaults = [{'buton': i, 'fiyat': 1.0} for i in range(1,6)]
-        return defaults
-    return doc.get('items', [])
-
-@app.post("/charge", response_model=ChargeResponse)
-def charge(req: ChargeRequest):
-    # Atomik bakiye düşümü: find_one_and_update ile bakiye >= miktar koşulu
-    card = db.cards.find_document({'kart_id': req.kart_id})
+# ---------------- Endpoints ----------------
+@app.post("/kart", response_model=KartResponse)
+def kart_endpoint(req: KartRequest):
+    card = get_card(req.kart_id)
     if not card:
-        raise HTTPException(status_code=404, detail="Kart bulunamadı")
-    bakiye = float(card.get('bakiye', 0.0))
-    if bakiye < req.miktar:
-        raise HTTPException(status_code=400, detail="Yetersiz bakiye")
-    # update
-    new_doc = db.cards.find_one_and_update({'kart_id': req.kart_id}, {'$inc': {'bakiye': -req.miktar}})
-    new_balance = float(new_doc.get('bakiye', 0.0))
-    # transaction log
-    db.transactions.insert_one({
-        'kart_id': req.kart_id,
-        'miktar': req.miktar,
-        'buton': req.buton,
-        'tarih': datetime.utcnow()
-    })
-    return ChargeResponse(ok=True, bakiye=new_balance)
+        return KartResponse(status=False, message="Kart bulunamadı")
+
+    bakiye = float(card.get("bakiye", 0.0))
+
+    if not req.program:
+        # Sadece bakiye sorgu
+        return KartResponse(status=True, bakiye=bakiye)
+
+    # Program kullanım
+    price_doc = get_program_price(req.program)
+    if not price_doc:
+        return KartResponse(status=False, message="Program bulunamadı")
+
+    price = float(price_doc.get("price", 0.0))
+    if bakiye < price:
+        return KartResponse(status=False, message="Yetersiz bakiye")
+
+    # Bakiye düş
+    new_card = db["cards"].find_one_and_update(
+        {"kart_id": req.kart_id},
+        {"$inc": {"bakiye": -price}}
+    )
+    new_bakiye = float(new_card.get("bakiye", 0.0))
+
+    # Program süresi
+    time_sec = get_program_time(req.program)
+
+    return KartResponse(status=True, bakiye=new_bakiye, time=time_sec)
 
 @app.post("/qr", response_model=QRResponse)
-def get_qr(req: QRRequest):
-    doc = get_qr_by_id(req.qr_id)
-    if not doc:
-        return QRResponse(qr_id=req.qr_id, hizmet_tipi=None, kullanildi=None)
-    hizmet = None
-    veri = doc.get('veri', '')
-    parts = veri.split('.')
-    if len(parts) >= 2:
-        hizmet = parts[1]
-    return QRResponse(qr_id=req.qr_id, hizmet_tipi=hizmet, kullanildi=doc.get('kullanildi', False))
+def qr_endpoint(req: QRRequest):
+    qr_doc = get_qr_data(req.qr_id)
+    if not qr_doc:
+        return QRResponse(status=False, message="QR bulunamadı")
 
-@app.post("/qr/use")
-def qr_use(req: QRRequest):
-    doc = get_qr_by_id(req.qr_id)
-    if not doc:
-        raise HTTPException(status_code=404, detail="QR bulunamadı")
-    if doc.get('kullanildi', False):
-        raise HTTPException(status_code=400, detail="QR zaten kullanılmış")
-    db.qr_codes.update_one({'qr_id': req.qr_id}, {'$set': {'kullanildi': True, 'kullanildi_tarih': datetime.utcnow()}})
-    return {"ok": True}
+    if qr_doc.get("kullanildi", False):
+        return QRResponse(status=False, message="QR kod zaten kullanılmış")
+
+    # Kullanıldığı işaretle
+    db["qr"].update_one({"veri": req.qr_id}, {"$set": {"kullanildi": True, "kullanildi_tarih": datetime.utcnow()}})
+
+    # Program bilgisi
+    veri = qr_doc.get("veri", "")
+    parts = veri.split(".")
+    program_name = parts[1] if len(parts) > 1 else None
+    time_sec = get_program_time(program_name) if program_name else None
+
+    return QRResponse(status=True, program=program_name, time=time_sec)
