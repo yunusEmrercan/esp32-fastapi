@@ -1,116 +1,183 @@
-# Abone Kart Otomatı & Kart/QR Bakiye API
+# Kart & QR API Dökümantasyonu
 
-Bu proje, **Raspberry Pi uyumlu bir kart otomatı arayüzü** ve **FastAPI tabanlı kart/QR bakiye sorgulama API** içerir.  
-Proje ile:
+**Base URL:** `http://<sunucu-ip>:8000`
 
-- Kart bakiyesi yükleyebilir ve görüntüleyebilirsiniz.
-- Yeni kart oluşturabilirsiniz.
-- QR kod oluşturabilir ve yazdırabilirsiniz.
-- MongoDB üzerinden bakiye ve QR kod verilerini yönetebilirsiniz.
+API, **kart bakiyesi sorgulama**, **program kullanımı** ve **QR kod doğrulama** işlemleri için iki ana endpoint sağlar.
 
 ---
 
-## 📦 Gereksinimler
+## 1. Kart Endpoint
 
-### Python
-- Python 3.12 veya üstü önerilir.
+### URL
 
-### Paketler
+`POST /kart`
 
-```txt
-fastapi==0.111.1
-uvicorn==0.23.2
-pydantic==2.6.2
-pymongo==4.6.1
-colorama==0.4.6
-```
+### Açıklama
 
-```shell
-pip install -r requirements.txt
-```
+* Sadece `kart_id` gönderildiğinde → kartın bakiyesini döner.
+* `kart_id` + `program` gönderildiğinde → kart bakiyesinden program fiyatını düşer ve program süresini döner.
 
+### Request
 
-
-⚙️ MongoDB Yapısı
-1. Kartlar (customers koleksiyonu)
 ```json
 {
-  "kart_id": "1135",
-  "bakiye": 150.0,
-  "tarih": "14-10-25"
+  "kart_id": 1235,
+  "program": "cila"    // opsiyonel
 }
 ```
 
-2. İşlemler (transactions koleksiyonu)
+### Response
+
+#### Sadece bakiye sorgu:
+
 ```json
 {
-  "kart_id": "1135",
-  "tutar": 50.0,
-  "tarih": "14-10-25",
-  "işlem": "Karta Para Yatırıldı."
+  "status": true,
+  "bakiye": 93.0
 }
 ```
 
-3. QR Kodlar (qrcode koleksiyonu)
+#### Program kullanımı:
+
 ```json
 {
-  "qr_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "tip": "Yıkama",
-  "tarih": "20251014 130000",
-  "veri": "3fa85f64-5717-4562-b3fc-2c963f66afa6.yikama.20251014 130000",
+  "status": true,
+  "bakiye": 91.0,
+  "time": 30
+}
+```
+
+#### Hatalı durumlar:
+
+```json
+{
+  "status": false,
+  "message": "yetersiz bakiye"
+}
+
+{
+  "status": false,
+  "message": "kart bulunamadı"
+}
+
+{
+  "status": false,
+  "message": "program bulunamadı"
+}
+```
+
+---
+
+## 2. QR Endpoint
+
+### URL
+
+`POST /qr`
+
+### Açıklama
+
+* QR verisi (`veri` alanı) gönderildiğinde, QR kontrol edilir.
+* Kullanılmamış ise QR kullanılır ve program adı + süresi döner.
+* Kullanılmış veya geçersiz QR’lar hata mesajı döner.
+
+### Request
+
+```json
+{
+  "qr_id": "benzersizid1.cila.20251016_2130"
+}
+```
+
+### Response
+
+#### Başarılı kullanım:
+
+```json
+{
+  "status": true,
+  "program": "cila",
+  "time": 30
+}
+```
+
+#### Hatalı durumlar:
+
+```json
+{
+  "status": false,
+  "message": "qr bulunamadı"
+}
+
+{
+  "status": false,
+  "message": "qr kod zaten kullanılmış"
+}
+```
+
+---
+
+## 3. Database Yapısı
+
+### Customers
+
+```json
+{
+  "kart_id": 1235,
+  "bakiye": 100
+}
+```
+
+### Pricing
+
+```json
+{
+  "program": "cila",
+  "price": 2,
+  "active": true
+}
+```
+
+### Times
+
+```json
+{
+  "program": "cila",
+  "time": 30
+}
+```
+
+### QR Codes
+
+```json
+{
+  "qr_id": "benzersizid1.cila.20251016_2130",
+  "veri": "benzersizid1.cila.20251016_2130",
+  "tip": "cila",
+  "tarih": "2025-10-16 22:05:00",
   "kullanildi": false
 }
 ```
 
-veri formatı: UUID.HIZMET_TIPI.TIMESTAMP
+> **Not:** Tüm veriler küçük harf olmalıdır.
 
-# Çalıştırma
+---
 
-```bash
-uvicorn main:app --reload
-```
+## 4. Örnek Kullanım (Python + requests)
 
+```python
+import requests
 
+BASE_URL = "http://<sunucu-ip>:8000"
 
+# 1. Kart bakiye sorgu
+r = requests.post(f"{BASE_URL}/kart", json={"kart_id": 1235})
+print(r.json())
 
+# 2. Program kullanımı
+r = requests.post(f"{BASE_URL}/kart", json={"kart_id": 1235, "program": "cila"})
+print(r.json())
 
-# # Kullanım Örneği
-
-📌 API Endpoints
-1. Kart Bakiyesi Sorgulama
-
-POST /bakiye
-Request Body:
-```json
-{
-  "kart_id": 1135
-}
-```
-
-Response:
-```json
-{
-  "kart_id": 1135,
-  "bakiye": 150.0,
-  "bulundu": true
-}
-```
-
-2. QR Kod Bilgisi Sorgulama
-
-POST /qr
-Request Body:
-```json
-{
-  "qr_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-}
-```
-
-Response:
-```json
-{
-  "qr_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "hizmet_tipi": "yikama",
-  "kullanildi": false
-}
+# 3. QR sorgu
+r = requests.post(f"{BASE_URL}/qr", json={"qr_id": "benzersizid1.cila.20251016_2130"})
+print(r.json())
 ```
