@@ -1,47 +1,37 @@
-# MongoDB/mongo.py
-from pymongo import MongoClient, ReturnDocument
-from pymongo.errors import PyMongoError
+# mongo.py
+from pymongo import MongoClient
 import logging
 
-logger = logging.getLogger("mongo_wrapper")
-
 class MongoDB:
-    def __init__(self, db, collection, connection_url='mongodb://localhost:27017/'):
-        self.client = MongoClient(connection_url)
-        self.db = self.client[db]
-        self.collection = self.db[collection]
+    def __init__(self, db_name, collection_name, uri="mongodb://localhost:27017/"):
+        self.client = MongoClient(uri)
+        self.db = self.client[db_name]
+        self.collection = self.db[collection_name]
 
-    def find_document(self, query):
+    def insert_document(self, data: dict):
         try:
-            return self.collection.find_one(query)
-        except PyMongoError as e:
-            logger.error(f"find_document error: {e}")
+            self.collection.insert_one(data)
+        except Exception as e:
+            logging.error(f"MongoDB insert error: {e}")
             raise
 
-    def find_many(self, query):
+    def update_document(self, filter_query: dict, update_data: dict, upsert=False):
         try:
-            return list(self.collection.find(query))
-        except PyMongoError as e:
-            logger.error(f"find_many error: {e}")
+            self.collection.update_one(filter_query, {"$set": update_data}, upsert=upsert)
+        except Exception as e:
+            logging.error(f"MongoDB update error: {e}")
             raise
 
-    def insert_one(self, doc):
+    def find_document(self, filter_query: dict):
         try:
-            return self.collection.insert_one(doc)
-        except PyMongoError as e:
-            logger.error(f"insert_one error: {e}")
+            return self.collection.find_one(filter_query)
+        except Exception as e:
+            logging.error(f"MongoDB find error: {e}")
             raise
 
-    def update_one(self, query, update):
+    def find_documents(self, filter_query: dict={}):
         try:
-            return self.collection.update_one(query, update)
-        except PyMongoError as e:
-            logger.error(f"update_one error: {e}")
-            raise
-
-    def find_one_and_update(self, query, update, return_document=ReturnDocument.AFTER):
-        try:
-            return self.collection.find_one_and_update(query, update, return_document=return_document)
-        except PyMongoError as e:
-            logger.error(f"find_one_and_update error: {e}")
+            return list(self.collection.find(filter_query))
+        except Exception as e:
+            logging.error(f"MongoDB find all error: {e}")
             raise
