@@ -52,17 +52,17 @@ API, **kart bakiyesi sorgulama**, **program kullanımı** ve **QR kod doğrulama
 ```json
 {
   "status": false,
-  "message": "yetersiz bakiye"
+  "message": "1" // Yetersiz Bakiye
 }
 
 {
   "status": false,
-  "message": "kart bulunamadı"
+  "message": "2" // Kart Bulunamadı
 }
 
 {
   "status": false,
-  "message": "program bulunamadı"
+  "message": "3" // Program Bulunamadı
 }
 ```
 
@@ -105,12 +105,12 @@ API, **kart bakiyesi sorgulama**, **program kullanımı** ve **QR kod doğrulama
 ```json
 {
   "status": false,
-  "message": "qr bulunamadı"
+  "message": "4" // QR Bulunamadı
 }
 
 {
   "status": false,
-  "message": "qr kod zaten kullanılmış"
+  "message": "5" // QR kod zaten kullanılmış
 }
 ```
 
@@ -159,6 +159,8 @@ API, **kart bakiyesi sorgulama**, **program kullanımı** ve **QR kod doğrulama
 ```
 
 > **Not:** Tüm veriler küçük harf olmalıdır.
+
+
 
 ---
 

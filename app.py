@@ -61,7 +61,7 @@ def get_qr_data(qr_id: str):
 def kart_endpoint(req: KartRequest):
     card = get_card(req.kart_id)
     if not card:
-        return KartResponse(status=False, message="Kart bulunamadı")
+        return KartResponse(status=False, message="2")
 
     bakiye = float(card.get("bakiye", 0.0))
 
@@ -72,11 +72,11 @@ def kart_endpoint(req: KartRequest):
     # Program kullanım
     price_doc = get_program_price(req.program)
     if not price_doc:
-        return KartResponse(status=False, message="Program bulunamadı")
+        return KartResponse(status=False, message="3")
 
     price = float(price_doc.get("price", 0.0))
     if bakiye < price:
-        return KartResponse(status=False, message="Yetersiz bakiye")
+        return KartResponse(status=False, message="1")
 
     # Bakiye düş
     new_card = db["cards"].find_one_and_update(
@@ -94,10 +94,10 @@ def kart_endpoint(req: KartRequest):
 def qr_endpoint(req: QRRequest):
     qr_doc = get_qr_data(req.qr_id)
     if not qr_doc:
-        return QRResponse(status=False, message="QR bulunamadı")
+        return QRResponse(status=False, message="4")
 
     if qr_doc.get("kullanildi", False):
-        return QRResponse(status=False, message="QR kod zaten kullanılmış")
+        return QRResponse(status=False, message="5")
 
     # Kullanıldığı işaretle
     db["qr"].update_one({"veri": req.qr_id}, {"$set": {"kullanildi": True, "kullanildi_tarih": datetime.utcnow()}})
