@@ -4,7 +4,7 @@ from colorama import init, Fore, Style
 
 init(autoreset=True)
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://192.168.1.250:8000"
 
 def print_success(msg):
     print(Fore.GREEN + msg)
@@ -57,10 +57,10 @@ def check_qr(qr_verisi):
 # ------------------ Örnek Kullanım ------------------
 if __name__ == "__main__":
     # Örnek kart ve program testleri
-    check_balance(1235)
-    use_program(1235, "cila")
-    check_balance(13235)
+    check_balance("0009198072")
+    use_program("0009198072", "cila")
+    check_balance("13235")
 
     # Örnek QR testleri
-    check_qr("qr001.cila.20251016_2205")
+    check_qr("2ba57ef7-34a4-412f-ad7c-059faaa1cee6.supurge.20251019 095349")
     check_qr("benzersizID2.cila.20251016_2140")
